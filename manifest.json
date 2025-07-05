@@ -1,0 +1,11 @@
+{
+	"id": "obs2epub-plugin",
+	"name": "Obsidian to EPUB",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Конвертация заметок Obsidian в EPUB с поддержкой изображений и вставок",
+	"author": "obs2epub",
+	"authorUrl": "",
+	"fundingUrl": "",
+	"isDesktopOnly": true
+} 
