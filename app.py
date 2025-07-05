@@ -311,6 +311,9 @@ def export_epub():
                 '--output', epub_path,
                 '--metadata', f'title={title}',
                 '--metadata', f'date={datetime.now().strftime("%Y-%m-%d")}',
+                '--metadata', 'author=',
+                '--metadata', 'rights=',
+                '--metadata', 'publisher=',
                 '--resource-path', temp_dir
             ] + processed_files
             
@@ -568,6 +571,11 @@ def process_obsidian_content(content, file_path=None, images_dir=None, base_path
             i += 1
             continue
         
+        # Удаляем строки с table-of-contents
+        if stripped_line.startswith('```table-of-contents'):
+            i += 1
+            continue
+        
         # Удаляем блоки метаданных плагинов (title: style: minLevel: и т.д.)
         if re.match(r'^(title|style|minLevel|maxLevel|includeLinks|debugInConsole):', stripped_line):
             # Пропускаем все строки до пустой строки или заголовка
@@ -579,6 +587,9 @@ def process_obsidian_content(content, file_path=None, images_dir=None, base_path
         i += 1
     
     content = '\n'.join(filtered_lines)
+    
+    # Убираем лишние переносы строк (более 2 подряд)
+    content = re.sub(r'\n{3,}', '\n\n', content)
     
     return content
 
