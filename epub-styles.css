@@ -1,12 +1,7 @@
-/* Предотвращение разрывов страниц */
+/* Мягкое предотвращение разрывов страниц */
 h1, h2, h3, h4, h5, h6 {
     page-break-after: avoid;
     break-after: avoid;
-}
-
-p {
-    page-break-inside: avoid;
-    break-inside: avoid;
 }
 
 /* Убираем принудительные разрывы между разделами */
@@ -23,6 +18,6 @@ p {
 
 /* Плавный переход между элементами */
 body {
-    orphans: 3;
-    widows: 3;
+    orphans: 2;
+    widows: 2;
 } 

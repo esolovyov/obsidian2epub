@@ -260,7 +260,9 @@ def export_epub():
             global current_project
             base_path = current_project['path'] if current_project else ''
             
-            # Обрабатываем каждый файл
+            # Объединяем все файлы в один markdown файл
+            combined_content = []
+            
             for file_info in files:
                 if not file_info.get('is_included'):
                     continue
@@ -276,18 +278,21 @@ def export_epub():
                 # Обрабатываем Obsidian-специфичные элементы и изображения
                 content = process_obsidian_content(content, file_path, images_dir, base_path)
                 
-                # Добавляем заголовок главы
-                chapter_title = file_info['name'].replace('.md', '')
-                final_content = f"# {chapter_title}\n\n{content}"
+                # Не добавляем заголовок главы если в контенте уже есть заголовок
+                if not content.lstrip().startswith('#'):
+                    chapter_title = file_info['name'].replace('.md', '')
+                    final_content = f"# {chapter_title}\n\n{content}"
+                else:
+                    final_content = content
                 
-                # Создаем временный файл
-                temp_file = os.path.join(
-                    temp_dir, 
-                    f"{len(processed_files):03d}_{file_info['name']}"
-                )
+                combined_content.append(final_content)
+            
+            # Создаем единый markdown файл
+            if combined_content:
+                combined_text = '\n\n'.join(combined_content)
+                temp_file = os.path.join(temp_dir, 'combined.md')
                 with open(temp_file, 'w', encoding='utf-8') as f:
-                    f.write(final_content)
-                
+                    f.write(combined_text)
                 processed_files.append(temp_file)
             
             if not processed_files:
@@ -312,7 +317,6 @@ def export_epub():
                 '--metadata', 'author=',
                 '--metadata', 'rights=',
                 '--metadata', 'publisher=',
-                '--top-level-division=section',
                 '--css', css_path,
                 '--resource-path', temp_dir
             ] + processed_files
@@ -545,7 +549,9 @@ def process_obsidian_content(content, file_path=None, images_dir=None, base_path
         content = re.sub(r'!\[\[([^\]]+)\]\]', r'*[Вставка: \1]*', content)
     
     # Убираем синтаксис callout'ов Obsidian [!NOTE|no-print]- Pic, но оставляем содержимое
-    content = re.sub(r'^\s*\[![\w\-|]+\].*?$', '', content, flags=re.MULTILINE)
+    # Удаляем строки с [!NOTE] и следующую строку с заголовком
+    content = re.sub(r'^\s*\[![\w\-|]+\].*?$\n?', '', content, flags=re.MULTILINE)
+    content = re.sub(r'^\s*\[![\w\-|]+\]\s*.*?$\n?', '', content, flags=re.MULTILINE)
     
     # Обрабатываем ссылки [[Note Name]]
     content = re.sub(r'\[\[([^\]]+)\]\]', r'**\1**', content)
