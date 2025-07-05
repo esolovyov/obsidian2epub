@@ -305,21 +305,30 @@ def export_epub():
             epub_filename = f"{title}.epub"
             epub_path = os.path.join(temp_dir, epub_filename)
             
-            # Команда pandoc - убираем переносы страниц и копирайт
-            css_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'epub-styles.css')
+            # Команда Calibre ebook-convert - с оглавлением для каждого файла
             cmd = [
-                'pandoc',
-                '--from', 'markdown',
-                '--to', 'epub',
-                '--output', epub_path,
-                '--metadata', f'title={title}',
-                '--metadata', f'date={datetime.now().strftime("%Y-%m-%d")}',
-                '--metadata', 'author=',
-                '--metadata', 'rights=',
-                '--metadata', 'publisher=',
-                '--css', css_path,
-                '--resource-path', temp_dir
-            ] + processed_files
+                'ebook-convert',
+                processed_files[0],  # input file
+                epub_path,           # output file
+                '--title', title,
+                '--authors', '',
+                '--publisher', '',
+                '--book-producer', '',
+                '--language', 'ru',
+                '--enable-heuristics',
+                '--markdown-extensions', 'markdown.extensions.extra,markdown.extensions.nl2br,markdown.extensions.sane_lists',
+                '--chapter', '//h:h1',  # Каждый H1 - новая глава
+                '--chapter-mark', 'pagebreak',  # Разрыв страницы перед главой
+                '--page-breaks-before', '//h:h1',  # Разрыв страницы перед H1
+                '--insert-blank-line',  # Пустые строки между абзацами
+                '--insert-blank-line-size', '0.5',
+                '--level1-toc', '//h:h1',  # H1 в оглавлении уровня 1
+                '--level2-toc', '//h:h2',  # H2 в оглавлении уровня 2
+                '--level3-toc', '//h:h3',  # H3 в оглавлении уровня 3
+                '--toc-title', 'Оглавление',  # Название оглавления
+                '--max-toc-links', '1000',  # Максимум ссылок в оглавлении
+                '--duplicate-links-in-toc'  # Дубликаты ссылок в оглавлении
+            ]
             
             # Выполняем команду
             result = subprocess.run(cmd, capture_output=True, text=True)
@@ -327,7 +336,7 @@ def export_epub():
             if result.returncode != 0:
                 return jsonify({
                     'success': False,
-                    'error': f'Ошибка pandoc: {result.stderr}'
+                    'error': f'Ошибка ebook-convert: {result.stderr}'
                 })
             
             # Копируем файл в папку загрузок
@@ -477,127 +486,39 @@ def build_folder_tree(base_path, folder_states=None):
 
 
 def process_obsidian_content(content, file_path=None, images_dir=None, base_path=None):
-    """Обработка Obsidian-специфичного контента"""
+    """Минимальная обработка Obsidian контента - только критически необходимое"""
     
-    # СУПЕР АГРЕССИВНАЯ ОЧИСТКА YAML - полностью удаляем всё между первыми ---
-    
-    # Метод 1: Удаляем любой блок начинающийся с --- в начале файла
+    # 1. Убираем YAML front matter (только это может ломать конвертер)
     if content.strip().startswith('---'):
         lines = content.split('\n')
-        yaml_start = 0
         yaml_end = -1
         
-        # Ищем первый --- в начале
-        if lines[0].strip() == '---':
-            yaml_start = 0
-            
-            # Ищем закрывающий ---
-            for i in range(1, len(lines)):
-                if lines[i].strip() == '---':
-                    yaml_end = i
-                    break
-            
-            if yaml_end > 0:
-                # Удаляем всё от начала до закрывающего --- включительно
-                content = '\n'.join(lines[yaml_end + 1:])
-            else:
-                # Нет закрывающего --- - удаляем всё до первого заголовка или 50 строк
-                for i in range(1, min(len(lines), 100)):
-                    line = lines[i].strip()
-                    if (line.startswith('#') or 
-                        (line and not line.startswith(('title:', 'date:', 'tags:', 'author:', 'description:', 'created:', 'updated:', 'aliases:', 'cssclass:', 'publish:', 'draft:', 'category:', 'categories:', 'summary:', 'weight:', 'url:', 'slug:', 'layout:', 'type:', 'series:', 'keywords:', 'cover:', 'thumbnail:', 'image:', 'featured:', 'toc:', 'math:', 'markup:', 'highlight:', 'linenos:', 'anchor:', 'menu:', 'sitemap:', 'noindex:', 'robots:', 'canonical:', 'redirect:', 'resources:', 'cascade:', 'params:', 'outputs:', 'translationKey:', 'lang:', 'contentDir:', 'disable:', 'Источник:', 'Тип:', 'Теги:', 'Дата создания:', 'Дата обновления:', '  -', '- ')) and 
-                         not re.match(r'^\s*[a-zA-Zа-яёА-ЯЁ0-9_-]+\s*:\s*', line))):
-                        content = '\n'.join(lines[i:])
-                        break
-                else:
-                    # Если не нашли подходящее место, берем с 50-й строки
-                    content = '\n'.join(lines[50:] if len(lines) > 50 else lines[1:])
+        # Ищем закрывающий ---
+        for i in range(1, len(lines)):
+            if lines[i].strip() == '---':
+                yaml_end = i
+                break
+        
+        if yaml_end > 0:
+            content = '\n'.join(lines[yaml_end + 1:])
+        else:
+            # Если нет закрывающего ---, удаляем первые 10 строк
+            content = '\n'.join(lines[10:] if len(lines) > 10 else lines[1:])
     
-    # Метод 2: Еще раз проверяем на остатки YAML
-    yaml_pattern = r'^---\s*\n.*?\n---\s*\n'
-    content = re.sub(yaml_pattern, '', content, flags=re.DOTALL | re.MULTILINE)
+    # 2. Простая обработка callout'ов - убираем только синтаксис
+    content = re.sub(r'^\s*\[![^\]]+\].*?$', '', content, flags=re.MULTILINE)
     
-    # Метод 3: Удаляем любые остатки YAML-подобных строк в начале
-    lines = content.split('\n')
-    start_index = 0
-    
-    for i, line in enumerate(lines[:20]):  # Проверяем только первые 20 строк
-        stripped = line.strip()
-        if (stripped == '' or
-            stripped.startswith('#') or
-            stripped.startswith('![[') or
-            stripped.startswith('[[') or
-            stripped.startswith('> ') or
-            stripped.startswith('- ') or
-            stripped.startswith('* ') or
-            stripped.startswith('1. ') or
-            stripped.startswith('```') or
-            stripped.startswith('|') or
-            (stripped and 
-             not stripped.startswith('---') and
-             not re.match(r'^[a-zA-Zа-яёА-ЯЁ0-9_\s-]*:\s*', stripped) and
-             not stripped.startswith(('  -', '- ')))):
-            start_index = i
-            break
-    
-    content = '\n'.join(lines[start_index:])
-    
-    # Обрабатываем вставки страниц ![[filename]] (embeds/transclusion)
-    if file_path and base_path:
+    # 3. Обрабатываем изображения и вставки (если есть папки)
+    if file_path and base_path and images_dir:
         content = process_embeds(content, file_path, base_path, images_dir)
-    else:
-        content = re.sub(r'!\[\[([^\]]+)\]\]', r'*[Вставка: \1]*', content)
     
-    # Убираем синтаксис callout'ов Obsidian [!NOTE|no-print]- Pic, но оставляем содержимое
-    # Удаляем строки с [!NOTE] и следующую строку с заголовком
-    content = re.sub(r'^\s*\[![\w\-|]+\].*?$\n?', '', content, flags=re.MULTILINE)
-    content = re.sub(r'^\s*\[![\w\-|]+\]\s*.*?$\n?', '', content, flags=re.MULTILINE)
-    
-    # Обрабатываем ссылки [[Note Name]]
+    # 4. Простая замена Obsidian ссылок на жирный текст
     content = re.sub(r'\[\[([^\]]+)\]\]', r'**\1**', content)
     
-    # Обрабатываем теги #tag
-    content = re.sub(r'#([a-zA-Z0-9_-]+)', r'**#\1**', content)
-    
-    # Убираем пустые строки в начале и конце
-    content = content.strip()
-    
-    # ФИНАЛЬНАЯ ОЧИСТКА: удаляем все оставшиеся --- строки
-    # которые могут быть интерпретированы pandoc как YAML
-    lines = content.split('\n')
-    filtered_lines = []
-    
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        stripped_line = line.strip()
-        
-        # Пропускаем строки содержащие только ---
-        if stripped_line == '---':
-            i += 1
-            continue
-        
-        # Удаляем строки с table-of-contents
-        if stripped_line.startswith('```table-of-contents'):
-            i += 1
-            continue
-        
-        # Удаляем блоки метаданных плагинов (title: style: minLevel: и т.д.)
-        if re.match(r'^(title|style|minLevel|maxLevel|includeLinks|debugInConsole):', stripped_line):
-            # Пропускаем все строки до пустой строки или заголовка
-            while i < len(lines) and lines[i].strip() != '' and not lines[i].strip().startswith('#'):
-                i += 1
-            continue
-        
-        filtered_lines.append(line)
-        i += 1
-    
-    content = '\n'.join(filtered_lines)
-    
-    # Убираем лишние переносы строк (более 2 подряд)
+    # 5. Убираем лишние переносы строк
     content = re.sub(r'\n{3,}', '\n\n', content)
     
-    return content
+    return content.strip()
 
 
 def process_embeds(content, file_path, base_path, images_dir, visited_files=None):
