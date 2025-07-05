@@ -300,16 +300,20 @@ def export_epub():
             epub_filename = f"{title}.epub"
             epub_path = os.path.join(temp_dir, epub_filename)
             
-            # Команда pandoc
+            # Команда pandoc - убираем переносы страниц и копирайт
+            css_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'epub-styles.css')
             cmd = [
                 'pandoc',
                 '--from', 'markdown',
                 '--to', 'epub',
                 '--output', epub_path,
                 '--metadata', f'title={title}',
-                '--metadata', 'author=Obsidian Notes',
                 '--metadata', f'date={datetime.now().strftime("%Y-%m-%d")}',
-                '--split-level=1',
+                '--metadata', 'author=',
+                '--metadata', 'rights=',
+                '--metadata', 'publisher=',
+                '--top-level-division=section',
+                '--css', css_path,
                 '--resource-path', temp_dir
             ] + processed_files
             
@@ -540,6 +544,9 @@ def process_obsidian_content(content, file_path=None, images_dir=None, base_path
     else:
         content = re.sub(r'!\[\[([^\]]+)\]\]', r'*[Вставка: \1]*', content)
     
+    # Убираем синтаксис callout'ов Obsidian [!NOTE|no-print]- Pic, но оставляем содержимое
+    content = re.sub(r'^\s*\[![\w\-|]+\].*?$', '', content, flags=re.MULTILINE)
+    
     # Обрабатываем ссылки [[Note Name]]
     content = re.sub(r'\[\[([^\]]+)\]\]', r'**\1**', content)
     
@@ -548,6 +555,41 @@ def process_obsidian_content(content, file_path=None, images_dir=None, base_path
     
     # Убираем пустые строки в начале и конце
     content = content.strip()
+    
+    # ФИНАЛЬНАЯ ОЧИСТКА: удаляем все оставшиеся --- строки
+    # которые могут быть интерпретированы pandoc как YAML
+    lines = content.split('\n')
+    filtered_lines = []
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped_line = line.strip()
+        
+        # Пропускаем строки содержащие только ---
+        if stripped_line == '---':
+            i += 1
+            continue
+        
+        # Удаляем строки с table-of-contents
+        if stripped_line.startswith('```table-of-contents'):
+            i += 1
+            continue
+        
+        # Удаляем блоки метаданных плагинов (title: style: minLevel: и т.д.)
+        if re.match(r'^(title|style|minLevel|maxLevel|includeLinks|debugInConsole):', stripped_line):
+            # Пропускаем все строки до пустой строки или заголовка
+            while i < len(lines) and lines[i].strip() != '' and not lines[i].strip().startswith('#'):
+                i += 1
+            continue
+        
+        filtered_lines.append(line)
+        i += 1
+    
+    content = '\n'.join(filtered_lines)
+    
+    # Убираем лишние переносы строк (более 2 подряд)
+    content = re.sub(r'\n{3,}', '\n\n', content)
     
     return content
 

@@ -304,6 +304,7 @@ def export_epub():
             epub_path = os.path.join(temp_dir, epub_filename)
             
             # Команда pandoc - убираем переносы страниц и копирайт
+            css_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'epub-styles.css')
             cmd = [
                 'pandoc',
                 '--from', 'markdown',
@@ -314,6 +315,8 @@ def export_epub():
                 '--metadata', 'author=',
                 '--metadata', 'rights=',
                 '--metadata', 'publisher=',
+                '--top-level-division=section',
+                '--css', css_path,
                 '--resource-path', temp_dir
             ] + processed_files
             
@@ -546,6 +549,9 @@ def process_obsidian_content(content, file_path=None, images_dir=None, base_path
         content = process_embeds(content, file_path, base_path, images_dir)
     else:
         content = re.sub(r'!\[\[([^\]]+)\]\]', '', content)
+    
+    # Убираем синтаксис callout'ов Obsidian [!NOTE|no-print]- Pic, но оставляем содержимое
+    content = re.sub(r'^\s*\[![\w\-|]+\].*?$', '', content, flags=re.MULTILINE)
     
     # Обрабатываем ссылки [[Note Name]]
     content = re.sub(r'\[\[([^\]]+)\]\]', r'**\1**', content)

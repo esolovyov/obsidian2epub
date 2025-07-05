@@ -1,0 +1,28 @@
+/* Предотвращение разрывов страниц */
+h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+    break-after: avoid;
+}
+
+p {
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+
+/* Убираем принудительные разрывы между разделами */
+.section {
+    page-break-before: avoid;
+    break-before: avoid;
+}
+
+/* Убираем разрывы между главами */
+.chapter {
+    page-break-before: avoid;
+    break-before: avoid;
+}
+
+/* Плавный переход между элементами */
+body {
+    orphans: 3;
+    widows: 3;
+} 
