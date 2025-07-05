@@ -552,6 +552,20 @@ def process_obsidian_content(content, file_path=None, images_dir=None, base_path
     # Убираем пустые строки в начале и конце
     content = content.strip()
     
+    # ФИНАЛЬНАЯ ОЧИСТКА: удаляем все оставшиеся --- строки
+    # которые могут быть интерпретированы pandoc как YAML
+    lines = content.split('\n')
+    filtered_lines = []
+    
+    for line in lines:
+        stripped_line = line.strip()
+        # Пропускаем строки содержащие только ---
+        if stripped_line == '---':
+            continue
+        filtered_lines.append(line)
+    
+    content = '\n'.join(filtered_lines)
+    
     return content
 
 
