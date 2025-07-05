@@ -542,7 +542,7 @@ def process_obsidian_content(content, file_path=None, images_dir=None, base_path
     if file_path and base_path:
         content = process_embeds(content, file_path, base_path, images_dir)
     else:
-        content = re.sub(r'!\[\[([^\]]+)\]\]', r'*[Изображение]*', content)
+        content = re.sub(r'!\[\[([^\]]+)\]\]', '', content)
     
     # Обрабатываем ссылки [[Note Name]]
     content = re.sub(r'\[\[([^\]]+)\]\]', r'**\1**', content)
@@ -622,9 +622,9 @@ def process_embeds(content, file_path, base_path, images_dir, visited_files=None
                 
             except Exception as e:
                 print(f"Ошибка при обработке вставки {embed_name}: {e}")
-                return f'*[Ошибка при вставке: {embed_name}]*'
+                return ''
         else:
-            return f'*[Файл для вставки не найден: {embed_name}]*'
+            return ''
     
     # Заменяем все вставки
     content = re.sub(r'!\[\[([^\]]+)\]\]', replace_embed, content)
@@ -700,14 +700,14 @@ def process_single_image(image_name, file_path, images_dir, base_path):
                     dest_path = os.path.join(images_dir, short_name)
                     shutil.copy2(img_path, dest_path)
                     
-                    # Возвращаем markdown ссылку без длинного имени
-                    return f'![Изображение](images/{short_name})'
+                    # Возвращаем markdown ссылку без подписи
+                    return f'![](images/{short_name})'
             except Exception as e:
                 print(f"Ошибка при копировании изображения {image_name}: {e}")
                 break
     
-    # Если изображение не найдено
-    return f'*[Изображение не найдено: {image_name}]*'
+    # Если изображение не найдено - не показываем ничего
+    return ''
 
 
 if __name__ == '__main__':
