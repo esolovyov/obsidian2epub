@@ -364,6 +364,9 @@ def download_file(filename):
         return jsonify({'error': str(e)}), 500
 
 
+
+
+
 def get_files_from_folder(base_path, folder_path):
     """Получение файлов из указанной папки"""
     files_data = []
