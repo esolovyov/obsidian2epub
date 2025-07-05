@@ -150,4 +150,12 @@ tmp/
 # Database files
 *.db
 *.sqlite
-*.sqlite3 
+*.sqlite3
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock 
