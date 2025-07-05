@@ -471,89 +471,68 @@ def build_folder_tree(base_path, folder_states=None):
 def process_obsidian_content(content, file_path=None, images_dir=None, base_path=None):
     """Обработка Obsidian-специфичного контента"""
     
-    # Метод 1: Удаляем правильный YAML блок
+    # СУПЕР АГРЕССИВНАЯ ОЧИСТКА YAML - полностью удаляем всё между первыми ---
+    
+    # Метод 1: Удаляем любой блок начинающийся с --- в начале файла
+    if content.strip().startswith('---'):
+        lines = content.split('\n')
+        yaml_start = 0
+        yaml_end = -1
+        
+        # Ищем первый --- в начале
+        if lines[0].strip() == '---':
+            yaml_start = 0
+            
+            # Ищем закрывающий ---
+            for i in range(1, len(lines)):
+                if lines[i].strip() == '---':
+                    yaml_end = i
+                    break
+            
+            if yaml_end > 0:
+                # Удаляем всё от начала до закрывающего --- включительно
+                content = '\n'.join(lines[yaml_end + 1:])
+            else:
+                # Нет закрывающего --- - удаляем всё до первого заголовка или 50 строк
+                for i in range(1, min(len(lines), 100)):
+                    line = lines[i].strip()
+                    if (line.startswith('#') or 
+                        (line and not line.startswith(('title:', 'date:', 'tags:', 'author:', 'description:', 'created:', 'updated:', 'aliases:', 'cssclass:', 'publish:', 'draft:', 'category:', 'categories:', 'summary:', 'weight:', 'url:', 'slug:', 'layout:', 'type:', 'series:', 'keywords:', 'cover:', 'thumbnail:', 'image:', 'featured:', 'toc:', 'math:', 'markup:', 'highlight:', 'linenos:', 'anchor:', 'menu:', 'sitemap:', 'noindex:', 'robots:', 'canonical:', 'redirect:', 'resources:', 'cascade:', 'params:', 'outputs:', 'translationKey:', 'lang:', 'contentDir:', 'disable:', 'Источник:', 'Тип:', 'Теги:', 'Дата создания:', 'Дата обновления:', '  -', '- ')) and 
+                         not re.match(r'^\s*[a-zA-Zа-яёА-ЯЁ0-9_-]+\s*:\s*', line))):
+                        content = '\n'.join(lines[i:])
+                        break
+                else:
+                    # Если не нашли подходящее место, берем с 50-й строки
+                    content = '\n'.join(lines[50:] if len(lines) > 50 else lines[1:])
+    
+    # Метод 2: Еще раз проверяем на остатки YAML
     yaml_pattern = r'^---\s*\n.*?\n---\s*\n'
     content = re.sub(yaml_pattern, '', content, flags=re.DOTALL | re.MULTILINE)
     
-    # Метод 2: Обработка незакрытого или поврежденного YAML в начале файла
-    if content.startswith('---'):
-        lines = content.split('\n')
-        yaml_end = -1
-        
-        # Ищем закрывающий ---
-        for i, line in enumerate(lines[1:], 1):
-            if line.strip() == '---':
-                yaml_end = i
-                break
-                
-        if yaml_end > 0:
-            # Найден закрывающий ---, удаляем весь блок
-            content = '\n'.join(lines[yaml_end + 1:])
-        else:
-            # Нет закрывающих --- - удаляем всё до первого markdown контента
-            content_start = 1
-            yaml_keywords = ['title:', 'date:', 'tags:', 'author:', 'description:', 'created:', 'updated:', 'aliases:', 'cssclass:', 'publish:', 'draft:', 'category:', 'categories:', 'summary:', 'weight:', 'url:', 'slug:', 'layout:', 'type:', 'series:', 'keywords:', 'cover:', 'thumbnail:', 'image:', 'featured:', 'toc:', 'math:', 'markup:', 'highlight:', 'linenos:', 'anchor:', 'menu:', 'sitemap:', 'noindex:', 'robots:', 'canonical:', 'redirect:', 'resources:', 'cascade:', 'params:', 'outputs:', 'translationKey:', 'lang:', 'contentDir:', 'disable:']
-            
-            for i, line in enumerate(lines[1:], 1):
-                # Прекращаем удаление если находим markdown заголовок или пустую строку
-                if (line.strip() == '' or 
-                    line.startswith('#') or 
-                    line.startswith('> ') or
-                    line.startswith('- ') or
-                    line.startswith('* ') or
-                    line.startswith('1. ') or
-                    not any(line.strip().startswith(keyword) for keyword in yaml_keywords) and
-                    not line.strip().startswith('---')):
-                    content_start = i
-                    break
-                    
-            content = '\n'.join(lines[content_start:])
-    
-    # Метод 3: Дополнительная очистка - удаляем строки которые явно выглядят как YAML
+    # Метод 3: Удаляем любые остатки YAML-подобных строк в начале
     lines = content.split('\n')
-    clean_lines = []
+    start_index = 0
     
-    for line in lines:
-        # Пропускаем строки, которые выглядят как YAML, но не markdown
-        if (line.strip() and 
-            not line.startswith('#') and 
-            not line.startswith('> ') and 
-            not line.startswith('- ') and 
-            not line.startswith('* ') and 
-            not line.startswith('1. ') and 
-            ':' in line and 
-            not line.strip().startswith('http') and
-            not line.strip().startswith('![') and
-            not line.strip().startswith('[') and
-            not line.strip().startswith('```') and
-            not line.strip().startswith('~~~') and
-            not line.strip().startswith('|') and
-            not line.strip().startswith('---') and
-            not line.strip().startswith('===') and
-            not line.strip().startswith('***') and
-            not line.strip().startswith('___') and
-            not line.strip().startswith('<!--') and
-            not line.strip().startswith('</') and
-            not line.strip().startswith('<') and
-            not line.strip().startswith('{') and
-            not line.strip().startswith('}') and
-            not ']]' in line and
-            not '[[' in line and
-            re.match(r'^\s*[a-zA-Z0-9_-]+\s*:\s*', line)):
-            # Это похоже на YAML ключ-значение
-            continue
-        
-        clean_lines.append(line)
+    for i, line in enumerate(lines[:20]):  # Проверяем только первые 20 строк
+        stripped = line.strip()
+        if (stripped == '' or
+            stripped.startswith('#') or
+            stripped.startswith('![[') or
+            stripped.startswith('[[') or
+            stripped.startswith('> ') or
+            stripped.startswith('- ') or
+            stripped.startswith('* ') or
+            stripped.startswith('1. ') or
+            stripped.startswith('```') or
+            stripped.startswith('|') or
+            (stripped and 
+             not stripped.startswith('---') and
+             not re.match(r'^[a-zA-Zа-яёА-ЯЁ0-9_\s-]*:\s*', stripped) and
+             not stripped.startswith(('  -', '- ')))):
+            start_index = i
+            break
     
-    content = '\n'.join(clean_lines)
-    
-    # Метод 4: Если контент всё ещё начинается с подозрительного YAML, удаляем до первого заголовка
-    if content.strip() and not content.strip().startswith('#'):
-        lines = content.split('\n')
-        for i, line in enumerate(lines):
-            if line.strip().startswith('#'):
-                content = '\n'.join(lines[i:])
-                break
+    content = '\n'.join(lines[start_index:])
     
     # Обрабатываем вставки страниц ![[filename]] (embeds/transclusion)
     if file_path and base_path:
