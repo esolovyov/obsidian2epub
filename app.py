@@ -276,9 +276,12 @@ def export_epub():
                 # Обрабатываем Obsidian-специфичные элементы и изображения
                 content = process_obsidian_content(content, file_path, images_dir, base_path)
                 
-                # Добавляем заголовок главы
-                chapter_title = file_info['name'].replace('.md', '')
-                final_content = f"# {chapter_title}\n\n{content}"
+                # Не добавляем заголовок главы если в контенте уже есть заголовок
+                if not content.lstrip().startswith('#'):
+                    chapter_title = file_info['name'].replace('.md', '')
+                    final_content = f"# {chapter_title}\n\n{content}"
+                else:
+                    final_content = content
                 
                 # Создаем временный файл
                 temp_file = os.path.join(
@@ -300,16 +303,14 @@ def export_epub():
             epub_filename = f"{title}.epub"
             epub_path = os.path.join(temp_dir, epub_filename)
             
-            # Команда pandoc
+            # Команда pandoc - убираем переносы страниц и копирайт
             cmd = [
                 'pandoc',
                 '--from', 'markdown',
                 '--to', 'epub',
                 '--output', epub_path,
                 '--metadata', f'title={title}',
-                '--metadata', 'author=Obsidian Notes',
                 '--metadata', f'date={datetime.now().strftime("%Y-%m-%d")}',
-                '--split-level=1',
                 '--resource-path', temp_dir
             ] + processed_files
             
@@ -541,7 +542,7 @@ def process_obsidian_content(content, file_path=None, images_dir=None, base_path
     if file_path and base_path:
         content = process_embeds(content, file_path, base_path, images_dir)
     else:
-        content = re.sub(r'!\[\[([^\]]+)\]\]', r'*[Вставка: \1]*', content)
+        content = re.sub(r'!\[\[([^\]]+)\]\]', r'*[Изображение]*', content)
     
     # Обрабатываем ссылки [[Note Name]]
     content = re.sub(r'\[\[([^\]]+)\]\]', r'**\1**', content)
@@ -557,12 +558,25 @@ def process_obsidian_content(content, file_path=None, images_dir=None, base_path
     lines = content.split('\n')
     filtered_lines = []
     
-    for line in lines:
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         stripped_line = line.strip()
+        
         # Пропускаем строки содержащие только ---
         if stripped_line == '---':
+            i += 1
             continue
+        
+        # Удаляем блоки метаданных плагинов (title: style: minLevel: и т.д.)
+        if re.match(r'^(title|style|minLevel|maxLevel|includeLinks|debugInConsole):', stripped_line):
+            # Пропускаем все строки до пустой строки или заголовка
+            while i < len(lines) and lines[i].strip() != '' and not lines[i].strip().startswith('#'):
+                i += 1
+            continue
+        
         filtered_lines.append(line)
+        i += 1
     
     content = '\n'.join(filtered_lines)
     
@@ -603,8 +617,8 @@ def process_embeds(content, file_path, base_path, images_dir, visited_files=None
                     embed_content, embed_file_path, images_dir, base_path
                 )
                 
-                # Добавляем разделитель
-                return f"\n\n---\n**Вставка из: {embed_name}**\n\n{embed_content}\n\n---\n\n"
+                # Добавляем разделитель без длинного имени
+                return f"\n\n{embed_content}\n\n"
                 
             except Exception as e:
                 print(f"Ошибка при обработке вставки {embed_name}: {e}")
@@ -680,12 +694,14 @@ def process_single_image(image_name, file_path, images_dir, base_path):
                 # Определяем расширение
                 _, ext = os.path.splitext(image_name)
                 if ext.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp']:
-                    # Копируем изображение
-                    dest_path = os.path.join(images_dir, image_name)
+                    # Копируем изображение с коротким именем
+                    file_ext = os.path.splitext(image_name)[1]
+                    short_name = f"image_{len(os.listdir(images_dir)) + 1}{file_ext}"
+                    dest_path = os.path.join(images_dir, short_name)
                     shutil.copy2(img_path, dest_path)
                     
-                    # Возвращаем markdown ссылку
-                    return f'![{image_name}](images/{image_name})'
+                    # Возвращаем markdown ссылку без длинного имени
+                    return f'![Изображение](images/{short_name})'
             except Exception as e:
                 print(f"Ошибка при копировании изображения {image_name}: {e}")
                 break
